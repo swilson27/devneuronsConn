@@ -1,0 +1,10 @@
+python-catmaid
+navis
+
+# dev
+black
+flake8
+mypy
+ipython
+jupyter
+notebook
