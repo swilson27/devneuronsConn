@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 #%%
+from doctest import NORMALIZE_WHITESPACE
 from black import out
 import pymaid
 import numpy as np
@@ -11,7 +12,6 @@ import itertools
 import os
 import pickle
 from collections import Counter
-from pyrsistent import T
 from tqdm import tqdm
 from ipywidgets import IntProgress
 import csv
@@ -44,6 +44,8 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 HERE = Path(__file__).resolve().parent
+
+SIDE_PLACEHOLDER = "__SIDE__"
 
 import json
 
@@ -79,25 +81,109 @@ def get_neurons():
     return neurons
 
 
-def name_pair(left_names, right_names):
+def name_pair(left_neurons, right_neurons):
     ''' assign tags to pairs'''
 
-    unsided_l = {n.replace("left", "__SIDE__"): n for n in left_names}
-    unsided_r = {n.replace("right", "__SIDE__"): n for n in right_names}
+    unsided_l = {n.name.replace("left", SIDE_PLACEHOLDER): n for n in left_neurons if "left" in n.name}
+    unsided_r = {n.name.replace("right", SIDE_PLACEHOLDER): n for n in right_neurons if "right" in n.name}
     in_both = set(unsided_l).intersection(unsided_r)
     for unsided_name in sorted(in_both):
-        yield (unsided_l[unsided_name], unsided_r[unsided_name])
+        yield unsided_name, (unsided_l[unsided_name], unsided_r[unsided_name])
+
 
 #%%
 def generate_adj_matrix():
     ''' generate and load adjacency matrix for each pair '''
 
     neurons_l, neurons_r = get_neurons()
-    by_name_l = dict(zip(neurons_l.name, neurons_l))
-    by_name_r = dict(zip(neurons_r.name, neurons_r))
-    paired = list(name_pair(by_name_l, by_name_r))
-    paireDF = pd.DataFrame(paired)
-    paireDF = paireDF.iloc[0:10,]
+    paired = dict(name_pair(neurons_l, neurons_r))
+
+    all_neurons = []
+    for left_right in paired.values():
+        all_neurons.extend(left_right)
+
+    adj = pymaid.adjacency_matrix(all_neurons, fractions=True, use_connectors=True)  # maybe use fractions=True
+    key = [n.name for n in all_neurons]
+    adj.index = key
+    adj.columns = key
+    return paired, adj
+
+
+def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
+    out_file = HERE / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
+    if out_file.is_file():
+        with open(out_file) as f:
+            return json.load(f)
+
+    if paired is None or adj is None:
+        paired, adj = generate_adj_matrix()
+
+    if is_input:
+        adj = adj.T
+
+    left_first = list(adj.index)
+    right_first = []
+    for left_idx in range(0, len(left_first), 2):
+        right_first.append(left_first[left_idx + 1])
+        right_first.append(left_first[left_idx])
+
+    out = dict()
+
+    for unsided_name, (left_nrn, right_nrn) in paired.items():
+        left_array = np.asarray(adj.loc[left_nrn.name])
+        right_array = np.asarray(adj.loc[right_nrn.name][right_first])
+        sim = navis.connectivity_similarity(np.array([left_array, right_array]), metric="cosine")
+        sim_arr = sim.to_numpy()
+        out[unsided_name] = float(sim_arr[0, 1])
+
+    with open(out_file, "w") as f:
+        json.dump(out, f, indent=2, sort_keys=True)
+
+    return out
+
+
+METRIC = "cosine"
+
+paired, adj = generate_adj_matrix()
+
+output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
+input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
+
+
+def sim_to_xy(sim, normalise=True):
+    x = sorted(v for v in sim.values() if not np.isnan(v))
+    y = np.arange(len(x))
+    if normalise:
+        y /= len(x)
+    return x, y
+
+
+from matplotlib import pyplot as plt
+
+NORMALISE = False
+
+fig = plt.figure()
+ax = fig.add_subplot()
+
+
+out_x, out_y = sim_to_xy(output_sim, NORMALISE)
+ax.plot(out_x, out_y, label="output similarity")
+
+in_x, in_y = sim_to_xy(input_sim, NORMALISE)
+ax.plot(in_x, in_y, label="input similarity")
+
+ax.legend()
+ax.set_xlabel(f"{METRIC} similarity value")
+ax.set_label("Cumulative frequency")
+
+plt.show()
+
+
+# print(adj)
+
+
+    # paireDF = pd.DataFrame(paired)
+    # paireDF = paireDF.iloc[0:10,]
 
     # below is where the issues are. I figured I could just get respective
     # connectivity tables for each L/R pair, and then iterate through to generate
@@ -112,15 +198,15 @@ def generate_adj_matrix():
     # scores for each LR pair (p.s. I am completely aware I'd need to merge LR homologues (see bottom of script), just wished to get this bit
     # working first
 
-    mat = []
-    for row in paireDF.itertuples():
-        cn_table_L = pymaid.get_partners(row[0])
-        cn_table_R = pymaid.get_partners(row[1])
+    # mat = []
+    # for row in paireDF.itertuples():
+    #     cn_table_L = pymaid.get_partners(row[0])
+    #     cn_table_R = pymaid.get_partners(row[1])
 
-        mat.append(pymaid.adjacency_matrix(cn_table_L, cn_table_R,
-        use_connectors=True, fractions=True))
-        print(row)
-    return(mat)
+    #     mat.append(pymaid.adjacency_matrix(cn_table_L, cn_table_R,
+    #     use_connectors=True, fractions=True))
+    #     print(row)
+    # return(mat)
 
 # this code below was the initial template for a results data frame I was hoping to generate (3 columns, rows: # of pairs)
 # Was intending to use a separate function, but now think it may be best to wrap it all in the previous one
@@ -136,15 +222,15 @@ def generate_adj_matrix():
 # this block below is just where I considered switching paireDF's representation of the pairs from the neuron names to skids
 
 #%%
-neurons_l, neurons_r = get_neurons()
-by_name_l = dict(zip(neurons_l.name, neurons_l))
-by_name_r = dict(zip(neurons_r.name, neurons_r))
-paired = list(name_pair(by_name_l, by_name_r))
-paireDF = pd.DataFrame(paired)
-paireDF = paireDF.iloc[0:10,]
+# neurons_l, neurons_r = get_neurons()
+# by_name_l = dict(zip(neurons_l.name, neurons_l))
+# by_name_r = dict(zip(neurons_r.name, neurons_r))
+# paired = list(name_pair(by_name_l, by_name_r))
+# paireDF = pd.DataFrame(paired)
+# paireDF = paireDF.iloc[0:10,]
 
-for row in paireDF.apply():
-    pymaid.get_skids_by_name(paireDF)
+# for row in paireDF.apply():
+#     pymaid.get_skids_by_name(paireDF)
 
 
 
