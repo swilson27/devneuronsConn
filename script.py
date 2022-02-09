@@ -39,14 +39,16 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from pathlib import Path
 from typing import Iterable, List, Tuple, TypeVar
-'''from tqdm import tqdm
+from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
-HERE = Path(__file__).resolve().parent'''
+HERE = Path(__file__).resolve().parent
 
 import json
-with open("seymour.json") as f:
+
+creds_path = os.environ.get("PYMAID_CREDENTIALS_PATH", HERE / "seymour.json")
+with open(creds_path) as f:
     creds = json.load(f)
 rm = pymaid.CatmaidInstance(**creds)
 
