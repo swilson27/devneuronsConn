@@ -44,6 +44,8 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 HERE = Path(__file__).resolve().parent
+CACHE_DIR = HERE / "cache"
+OUT_DIR = HERE / "output"
 
 SIDE_PLACEHOLDER = "__SIDE__"
 
@@ -67,15 +69,15 @@ rm = pymaid.CatmaidInstance(**creds)
 def get_neurons():
     ''' get CatmaidNeuronLists of left and right brain pairs.
         N.B. lists are each in arbitrary order '''
-    fpath = "Cneurons.pickle"
+    fpath = CACHE_DIR / "Cneurons.pickle"
     if not os.path.exists(fpath):
         import pymaid
         neurons = tuple(pymaid.get_neuron("annotation:sw;brainpair;" + side) for side in "LR")
 
-        with open("Cneurons.pickle", "wb") as f:
+        with open(fpath, "wb") as f:
             pickle.dump(neurons, f, protocol=5)
     else:
-        with open("Cneurons.pickle", "rb") as f:
+        with open(fpath, "rb") as f:
             neurons = pickle.load(f)
 
     return neurons
@@ -110,7 +112,7 @@ def generate_adj_matrix():
 
 
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
-    out_file = HERE / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
+    out_file = OUT_DIR / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
     if out_file.is_file():
         with open(out_file) as f:
             return json.load(f)
