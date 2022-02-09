@@ -1,8 +1,8 @@
 # CAnalysis
 
-Connectivity analysis for the "deviants neurons" project. Code and small data found within.
+Systematic connectivity analysis across L-R pairs of brain; conducted for 'deviant neurons' project. Code and small data found within.
 
-## Usage
+# Usage
 
 - Ensure python 3.8+ is available
 - create and activate a virtual environment with your tool of choice
