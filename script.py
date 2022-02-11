@@ -157,7 +157,7 @@ input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
 
 
 def sim_to_xy(sim, normalise=True):
-    x = sorted(v for v in sim.values() if not np.isnan(v))
+    x = sorted(v for v in sim.values() if v is not None and not np.isnan(v))
     y = np.arange(len(x))
     if normalise:
         y /= len(x)
