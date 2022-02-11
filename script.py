@@ -136,7 +136,11 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
         right_array = np.asarray(adj.loc[right_nrn.name][right_first])
         sim = navis.connectivity_similarity(np.array([left_array, right_array]), metric="cosine")
         sim_arr = sim.to_numpy()
-        out[unsided_name] = float(sim_arr[0, 1])
+        val = float(sim_arr[0, 1])
+        if np.isnan(val):
+            val = None
+
+        out[unsided_name] = val
 
     with open(out_file, "w") as f:
         json.dump(out, f, indent=2, sort_keys=True)
