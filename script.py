@@ -109,7 +109,7 @@ def generate_adj_matrix(neurons_l, neurons_r):
     adj.index = key
     adj.columns = key
     return paired, adj
-
+#%%
 
 def fusion(pair_list):
     # list_pairs: a list of tuples, assumed to be skeleton IDs
@@ -121,7 +121,7 @@ def fusion(pair_list):
     
     cos_sims = {}
     for pair in pair_list:
-        partners = pymaid.get_partners(pair)
+        partners = pymaid.get_partners(pair)    
         partner_skids = set(partners["skeleton_id"])
         columns = []
         while len(partner_skids) > 0:
@@ -141,21 +141,15 @@ def fusion(pair_list):
         # Two rows, as many colums as were needed
         matrix = np.array(columns).transpose() # rows have to be skid1, skid2
 
-        out = dict()
         score = navis.connectivity_similarity(matrix, metric="cosine")
         cos_sims[skid1] = score[0]
         cos_sims[skid2] = score[1]
 
     # Save the similarity scores
     # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
-
-        sim_arr = score.to_numpy()
-        out[unsided_name] = float(sim_arr[0, 1])
-
-    with open(out_file, "w") as f:
-        json.dump(out, f, indent=2, sort_keys=True)
-
-    return out
+            
+        out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
+        
     
 
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
