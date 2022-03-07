@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 #%%
 import navis
 import numpy as np
@@ -52,6 +53,7 @@ rm = pymaid.CatmaidInstance(**creds)
 def get_neurons():
     # get CatmaidNeuronLists of left and right brain pairs, N.B. each is in arbitrary order
     # sw annotation has 1172 pairs
+    
     fpath = CACHE_DIR / "Cneurons.pickle"
     if not os.path.exists(fpath):
         import pymaid
@@ -65,13 +67,11 @@ def get_neurons():
 
     return neurons
 
-
 def indexed_names(skids):
     # Taking skids, outputs a chronologically indexed order of skids:names as a dict
     names = [pymaid.get_names(skid) for skid in skids]
     dict = {k:v for x in names for k,v in x.items()}
     return(dict)
-
 
 def side_merge(left_neurons, right_neurons):
     # takes left and right neurons (as respective skid:name dicts), and replaces side names with longest common substring
@@ -150,11 +150,7 @@ def fusion(pair_list):
             
         out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
         
-    
-
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
-    # generate similarity score (default=cosine), taking adjacency matrices as inputs
-
     out_file = OUT_DIR / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
     if out_file.is_file():
         with open(out_file) as f:
@@ -179,7 +175,53 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
         right_array = np.asarray(adj.loc[right_nrn.name][right_first])
         sim = navis.connectivity_similarity(np.array([left_array, right_array]), metric="cosine")
         sim_arr = sim.to_numpy()
-        out[unsided_name] = float(sim_arr[0, 1])
+        val = float(sim_arr[0, 1])
+        if np.isnan(val):
+            val = None
+
+        out[unsided_name] = val
+
+    with open(out_file, "w") as f:
+        json.dump(out, f, indent=2, sort_keys=True)
+
+    return out
+
+
+METRIC = "cosine"
+
+paired, adj = generate_adj_matrix()
+
+output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
+input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
+
+
+def sim_to_xy(sim, normalise=True):
+    x = sorted(v for v in sim.values() if v is not None and not np.isnan(v))
+    y = np.arange(len(x))
+    if normalise:
+        y /= len(x)
+    return x, y
+
+
+from matplotlib import pyplot as plt
+
+NORMALISE = False
+
+fig = plt.figure()
+ax = fig.add_subplot()
+
+
+out_x, out_y = sim_to_xy(output_sim, NORMALISE)
+ax.plot(out_x, out_y, label="output similarity")
+
+in_x, in_y = sim_to_xy(input_sim, NORMALISE)
+ax.plot(in_x, in_y, label="input similarity")
+
+ax.legend()
+ax.set_xlabel(f"{METRIC} similarity value")
+ax.set_label("Cumulative frequency")
+
+plt.show()
 
     with open(out_file, "w") as f:
         json.dump(out, f, indent=2, sort_keys=True)
