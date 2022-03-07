@@ -67,23 +67,37 @@ def get_neurons():
 
     return neurons
 
+def indexed_names(skids):
+    # Taking skids, outputs a chronologically indexed order of skids:names as a dict
+    names = [pymaid.get_names(skid) for skid in skids]
+    dict = {k:v for x in names for k,v in x.items()}
+    return(dict)
+
 def side_merge(left_neurons, right_neurons):
-    # replace side name with placeholder, merge pairs and sort tuples
-    '''TODO: using this SIDE_PLACEHOLDER misses ~500 pairs (not all have same names, nor use left/right as side differential)
-    Instead wish to use above annotation (sw;brainpair;L or R) to merge pairs, should get all 1172'''
+    # takes left and right neurons (as respective skid:name dicts), and replaces side names with longest common substring
+    # sort tuples
 
-    unsided_l = {n.name.replace("left", SIDE_PLACEHOLDER): n for n in left_neurons if "left" in n.name}
-    unsided_r = {n.name.replace("right", SIDE_PLACEHOLDER): n for n in right_neurons if "right" in n.name}
-    in_both = set(unsided_l).intersection(unsided_r)
-    for unsided_name in sorted(in_both):
-        yield unsided_name, (unsided_l[unsided_name], unsided_r[unsided_name])
+    left_names = indexed_names(left_neurons)
+    right_names = indexed_names(right_neurons)
+    name_pairs = list(zip(left_names.values(), right_names.values()))
 
+    from difflib import SequenceMatcher
+    merged_l=[]
+    merged_r=[]
+    for index, pair in enumerate(name_pairs):
+        matcher = SequenceMatcher(None, pair[0], pair[1])
+        merge = matcher.find_longest_match(0, len(pair[0]), 0, len(pair[1]))
+        merged_l.append(pair[0][merge.a:merge.a + merge.size])
+        #merged_r.append(
+    in_both = set(merged_l).intersection(merged_r)
+    for unsided_name in sorted(in_both): # yields unsided name, left name, right name for these intersected pairs
+        yield unsided_name, (merged_l[unsided_name], merged_r[unsided_name])
 
-def generate_adj_matrix():
-    # generate and load adjacency matrix for each pair (assum
-    # TODO: make sure two lists are same length, and rows match (except for L/R difference)
+def generate_adj_matrix(neurons_l, neurons_r):
+    # generate and load adjacency matrix for each pair
+    # TODO: assumes two lists are same length and rows match (except for L/R difference)
 
-    neurons_l, neurons_r = get_neurons()
+    #neurons_l, neurons_r = get_neurons()
     paired = dict(side_merge(neurons_l, neurons_r))
 
     all_neurons = []
@@ -95,7 +109,47 @@ def generate_adj_matrix():
     adj.index = key
     adj.columns = key
     return paired, adj
+#%%
 
+def fusion(pair_list):
+    # list_pairs: a list of tuples, assumed to be skeleton IDs
+    
+    pair_dict = {}
+    for pair in pair_list:
+        pair_dict[pair[0]] = pair[1]
+        pair_dict[pair[1]] = pair[0]
+    
+    cos_sims = {}
+    for pair in pair_list:
+        partners = pymaid.get_partners(pair)    
+        partner_skids = set(partners["skeleton_id"])
+        columns = []
+        while len(partner_skids) > 0:
+            skid1 = iter(partner_skids).next()
+            skid2 = pair_dict.get(skid1, None)
+            if skid2 is None:
+                # Nothing to fuse. But must normalize
+                columns.append(partners["skid1"] / float(sum(partners["skid1"])))
+            else:
+                # Fuse two vectors, normalized
+                n_syn1 = float(sum(partners["skid1"]))
+                n_syn2 = float(sum(partners["skid2"]))
+                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
+            # Remove both from set
+            del partner_skids[skid1]
+            del partner_skids[skid2]
+        # Two rows, as many colums as were needed
+        matrix = np.array(columns).transpose() # rows have to be skid1, skid2
+
+        score = navis.connectivity_similarity(matrix, metric="cosine")
+        cos_sims[skid1] = score[0]
+        cos_sims[skid2] = score[1]
+
+    # Save the similarity scores
+    # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
+            
+        out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
+        
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
     out_file = OUT_DIR / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
     if out_file.is_file():
@@ -180,8 +234,17 @@ plt.show()
 #%%
 METRIC = "cosine"
 
-paired, adj = generate_adj_matrix()
+bp = pd.read_csv (r"/Users/swilson/Documents/Devneurons/MAnalysis/brain-pairs.csv")
+bp.drop('Unnamed: 0', axis=1, inplace=True)
+# left_skids = list(bp["left"])
+# right_skids = list(bp["right"])
 
+records = bp.to_records(index=False)
+skid_pairs = list(records)
+
+#%%
+
+paired, adj = generate_adj_matrix(left_skids, right_skids)
 output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
 input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
 
@@ -212,3 +275,22 @@ ax.set_xlabel(f"{METRIC} similarity value")
 ax.set_label("Cumulative frequency")
 
 plt.show()
+# %%
+""" bp = pd.read_csv (r"/Users/swilson/Documents/Devneurons/MAnalysis/brain-pairs.csv")
+left_skids = list(bp.iloc[:,0])
+right_skids = list(bp["right"])
+
+left_names = indexed_names(left_skids)
+right_names = indexed_names(right_skids)
+name_pairs = list(zip(left_names, right_names))
+
+LRdict = dict(zip(left_names.values(), right_names.values()))
+RLdict = dict(zip(right_names.values(), left_names.values()))
+ """
+# %%
+'''just look up partners in that table, make sure its consistent with the skeletons you're pulling with the annotation, 
+throw an error if there are any missing or any extra
+
+i'd go through the table and make a {left: right} dict, a {right: left} dict, then go through 
+all the skeletons you get with the annotation and make sure they're in exactly one dict
+then you can look up the partners easily either way'''
