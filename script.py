@@ -53,7 +53,7 @@ rm = pymaid.CatmaidInstance(**creds)
 def get_neurons():
     # get CatmaidNeuronLists of left and right brain pairs, N.B. each is in arbitrary order
     # sw annotation has 1172 pairs
-    
+
     fpath = CACHE_DIR / "Cneurons.pickle"
     if not os.path.exists(fpath):
         import pymaid
@@ -118,28 +118,26 @@ def merged_analysis(pair_list):
     for pair in pair_list:
         pair_dict[pair[0]] = pair[1]
         pair_dict[pair[1]] = pair[0]
-    
+
     cos_sims = {}
     for pair in pair_list:
         partners = pymaid.get_partners(pair[0:1])
-        partners.append = pymaid.get_partners(pair[1])    
+        partners.append(pymaid.get_partners(pair[1]))
         partner_skids = set(partners["skeleton_id"])
         columns = []
-        while len(partner_skids) > 0:
-            skidcycle = iter(partner_skids)
-            skid1 = next(skidcycle)
-            skid2 = pair_dict.get(skid1, None)
+        while partner_skids:
+            skid1 = partner_skids.pop()
+            skid2 = pair_dict.get(skid1)
             if skid2 is None:
                 # Nothing to fuse. But must normalize
-                columns.append(partners["skid1"] / float(sum(partners["skid1"])))
+                columns.append(partners["skid1"] / float(partners["skid1"].sum()))
             else:
                 # Fuse two vectors, normalized
                 n_syn1 = float(sum(partners["skid1"]))
                 n_syn2 = float(sum(partners["skid2"]))
                 columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
             # Remove both from set
-            del partner_skids[skid1]
-            del partner_skids[skid2]
+            partner_skids.difference_update([skid1, skid2])
         # Two rows, as many colums as were needed
         matrix = np.array(columns).transpose() # rows have to be skid1, skid2
 
@@ -149,9 +147,9 @@ def merged_analysis(pair_list):
 
     # Save the similarity scores
     # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
-            
+
         out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
-        
+
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
     out_file = OUT_DIR / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
     if out_file.is_file():
@@ -195,11 +193,12 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
 #%%
 METRIC = "cosine"
 
-bp = pd.read_csv (r"/Users/swilson/Documents/Devneurons/MAnalysis/brain-pairs.csv")
+bp = pd.read_csv("/Users/swilson/Documents/Devneurons/MAnalysis/brain-pairs.csv")
 bp.drop('Unnamed: 0', axis=1, inplace=True)
 # left_skids = list(bp["left"])
 # right_skids = list(bp["right"])
 
+# list(bp.itertuples(index=False))
 records = bp.to_records(index=False)
 skid_pairs = list(records)
 
@@ -248,9 +247,9 @@ LRdict = dict(zip(left_names.values(), right_names.values()))
 RLdict = dict(zip(right_names.values(), left_names.values()))
  """
 # %%
-'''just look up partners in that table, make sure its consistent with the skeletons you're pulling with the annotation, 
+'''just look up partners in that table, make sure its consistent with the skeletons you're pulling with the annotation,
 throw an error if there are any missing or any extra
 
-i'd go through the table and make a {left: right} dict, a {right: left} dict, then go through 
+i'd go through the table and make a {left: right} dict, a {right: left} dict, then go through
 all the skeletons you get with the annotation and make sure they're in exactly one dict
 then you can look up the partners easily either way'''
