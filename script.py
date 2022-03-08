@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 #%%
+import sys
 import navis
 import numpy as np
 import pandas as pd
@@ -111,9 +112,53 @@ def generate_adj_matrix(neurons_l, neurons_r):
     return paired, adj
 #%%
 
+def merged_adjacency(pair_list) -> pd.DataFrame:
+    """Produce an adjacency matrix where left-right target pairs are each merged into single units.
+
+    The values are input fractions, so merging is done by arithmetic mean (consider harmonic mean?).
+
+    Parameters
+    ----------
+    pair_list : list of 2-tuples of skeleton IDs
+
+    Returns
+    -------
+    pd.DataFrame
+        adjacency matrix whose row labels are skeleton IDs
+        and column labels are indices into the original pair list
+    """
+    all_skids = []
+    for l_r in pair_list:
+        all_skids.extend(l_r)
+    adj = pymaid.adjacency_matrix(all_skids, fractions=True)
+    rows = []
+    for _, row in adj.iterrows():
+        rows.append([
+            (row[l_skid] + row[r_skid]) / 2
+            for l_skid, r_skid in pair_list
+        ])
+
+    return pd.DataFrame(rows, index=adj.index)
+
+
 def merged_analysis(pair_list):
     # takes as input a list of tuples, assumed to be skeleton IDs
     # merges pairs, constructs adjacency matrix, scores connectivity (cosine)
+    adj = merged_adjacency(pair_list)
+    sims = []
+    for l_skid, r_skid in tqdm(pair_list):
+        sim = navis.connectivity_similarity(
+            np.array([adj.loc[l_skid], adj.loc[r_skid]]), "cosine"
+        ).to_numpy()[0, 1]
+        sims.append(sim)
+
+    df = pd.DataFrame(pair_list, dtype=int, columns=["left_skid", "right_skid"])
+    df["cosine_similarity_merged_targets"] = np.asarray(sims, dtype=float)
+    return df
+
+
+
+
     pair_dict = {}
     for pair in pair_list:
         pair_dict[pair[0]] = pair[1]
@@ -121,8 +166,9 @@ def merged_analysis(pair_list):
 
     cos_sims = {}
     for pair in pair_list:
-        partners = pymaid.get_partners(pair[0:1])
-        partners.append(pymaid.get_partners(pair[1]))
+        partners = pymaid.get_partners(list(pair))
+        # partners = pymaid.get_partners(pair[0])
+        # partners.append(pymaid.get_partners(pair[1]))
         partner_skids = set(partners["skeleton_id"])
         columns = []
         while partner_skids:
@@ -130,12 +176,12 @@ def merged_analysis(pair_list):
             skid2 = pair_dict.get(skid1)
             if skid2 is None:
                 # Nothing to fuse. But must normalize
-                columns.append(partners["skid1"] / float(partners["skid1"].sum()))
+                columns.append(partners[skid1] / float(partners[skid1].sum()))
             else:
                 # Fuse two vectors, normalized
-                n_syn1 = float(sum(partners["skid1"]))
-                n_syn2 = float(sum(partners["skid2"]))
-                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
+                n_syn1 = float(sum(partners[skid1]))
+                n_syn2 = float(sum(partners[skid2]))
+                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners[skid1], partners[skid2])])
             # Remove both from set
             partner_skids.difference_update([skid1, skid2])
         # Two rows, as many colums as were needed
@@ -193,16 +239,20 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
 #%%
 METRIC = "cosine"
 
-bp = pd.read_csv("/Users/swilson/Documents/Devneurons/MAnalysis/brain-pairs.csv")
+bp = pd.read_csv(HERE / "brain-pairs.csv")
 bp.drop('Unnamed: 0', axis=1, inplace=True)
 # left_skids = list(bp["left"])
 # right_skids = list(bp["right"])
 
-# list(bp.itertuples(index=False))
-records = bp.to_records(index=False)
-skid_pairs = list(records)
+skid_pairs = bp.to_numpy().astype(int).tolist()
 
 #%%
+
+merged_results = merged_analysis(skid_pairs)
+merged_results.to_csv(OUT_DIR / "merged_targets_cosine_output.tsv", sep="\t", index=False)
+
+
+sys.exit()
 
 paired, adj = generate_adj_matrix(left_skids, right_skids)
 output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
@@ -235,7 +285,7 @@ ax.set_label("Cumulative frequency")
 
 plt.show()
 # %%
-""" bp = pd.read_csv (r"/Users/swilson/Documents/Devneurons/MAnalysis/brain-pairs.csv")
+""" bp = pd.read_csv (HERE / "brain-pairs.csv")
 left_skids = list(bp.iloc[:,0])
 right_skids = list(bp["right"])
 
