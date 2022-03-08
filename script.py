@@ -111,9 +111,9 @@ def generate_adj_matrix(neurons_l, neurons_r):
     return paired, adj
 #%%
 
-def fusion(pair_list):
-    # list_pairs: a list of tuples, assumed to be skeleton IDs
-    
+def merged_analysis(pair_list):
+    # takes as input a list of tuples, assumed to be skeleton IDs
+    # merges pairs, constructs adjacency matrix, scores connectivity (cosine)
     pair_dict = {}
     for pair in pair_list:
         pair_dict[pair[0]] = pair[1]
@@ -121,11 +121,13 @@ def fusion(pair_list):
     
     cos_sims = {}
     for pair in pair_list:
-        partners = pymaid.get_partners(pair)    
+        partners = pymaid.get_partners(pair[0:1])
+        partners.append = pymaid.get_partners(pair[1])    
         partner_skids = set(partners["skeleton_id"])
         columns = []
         while len(partner_skids) > 0:
-            skid1 = iter(partner_skids).next()
+            skidcycle = iter(partner_skids)
+            skid1 = next(skidcycle)
             skid2 = pair_dict.get(skid1, None)
             if skid2 is None:
                 # Nothing to fuse. But must normalize
@@ -187,49 +189,8 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
     return out
 
 
-METRIC = "cosine"
-
-paired, adj = generate_adj_matrix()
-
-output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
-input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
-
-
-def sim_to_xy(sim, normalise=True):
-    x = sorted(v for v in sim.values() if v is not None and not np.isnan(v))
-    y = np.arange(len(x))
-    if normalise:
-        y /= len(x)
-    return x, y
-
-
-from matplotlib import pyplot as plt
-
-NORMALISE = False
-
-fig = plt.figure()
-ax = fig.add_subplot()
-
-
-out_x, out_y = sim_to_xy(output_sim, NORMALISE)
-ax.plot(out_x, out_y, label="output similarity")
-
-in_x, in_y = sim_to_xy(input_sim, NORMALISE)
-ax.plot(in_x, in_y, label="input similarity")
-
-ax.legend()
-ax.set_xlabel(f"{METRIC} similarity value")
-ax.set_label("Cumulative frequency")
-
-plt.show()
-
-    with open(out_file, "w") as f:
-        json.dump(out, f, indent=2, sort_keys=True)
-
-    return out
-
-
 ## Run analysis and explore data ##
+
 
 #%%
 METRIC = "cosine"
@@ -255,7 +216,6 @@ def sim_to_xy(sim, normalise=True):
     if normalise:
         y /= len(x)
     return x, y
-
 
 
 NORMALISE = False
