@@ -223,7 +223,7 @@ skid_pairs = bp.to_numpy().astype(int).tolist()
 #%%
 
 merged_results = merged_analysis(skid_pairs)
-merged_results.to_csv(OUT_DIR / "merged_targets_cosine_output.tsv", sep="\t", index=False)
+merged_results.to_csv(OUT_DIR / "merged_threshold_cosine_output.tsv", sep="\t", index=False)
 
 
 sys.exit()
