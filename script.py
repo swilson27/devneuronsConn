@@ -108,67 +108,8 @@ def generate_adj_matrix(neurons_l, neurons_r):
     adj.index = key
     adj.columns = key
     return paired, adj
-#%%
-
-def merged_adjacency(pair_list) -> pd.DataFrame:
-    """ 
-    Produce an adjacency matrix where left-right target pairs are each merged into single units.
-
-    The values are input fractions, so merging is done by arithmetic mean (consider harmonic mean?).
-
-    Parameters
-    ----------
-    pair_list : list of 2-tuples of skeleton IDs
-
-    Returns
-    -------
-    pd.DataFrame : adjacency matrix whose row labels are skeleton IDs and column labels are indices into the original pair list
-    """
-    all_skids = []
-    for l_r in pair_list:
-        all_skids.extend(l_r)
-    adj = pymaid.adjacency_matrix(all_skids, fractions=True)
-    rows = []
-    for _, row in adj.iterrows():
-        rows.append([
-            (row[l_skid] + row[r_skid]) / 2
-            for l_skid, r_skid in pair_list
-        ])
-
-    return pd.DataFrame(rows, index=adj.index)
 
 
-def merged_analysis(pair_list):
-    # takes as input a list of tuples, assumed to be skeleton IDs
-    # merges pairs, constructs adjacency matrix, scores connectivity (cosine)
-    """
-    Constructs adjacency matrix, merges pairs, scores connectivity (cosine)
-
-    Args:
-        pair_list : list of 2-tuples of skeleton IDs
-
-    Returns:
-        _type_: _description_
-    """    """
-
-    Args:
-        pair_list (_type_): _description_
-
-    Returns:
-        pd.Data Frame: rows = # of pairs, 3 columns (left neuron, right neuron, cosine similarity score)
-    """    
-   
-    adj = merged_adjacency(pair_list)
-    sims = []
-    for l_skid, r_skid in tqdm(pair_list):
-        sim = navis.connectivity_similarity(np.array([adj.loc[l_skid], adj.loc[r_skid]]), "cosine", threshold = 2).to_numpy()[0, 1]
-        sims.append(sim)
-
-    df = pd.DataFrame(pair_list, dtype=int, columns=["left_skid", "right_skid"])
-    df["cosine_similarity_merged_targets"] = pd.Series(np.asarray(sims, dtype=float))
-    return df
-
- 
 
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
     out_file = OUT_DIR / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
@@ -193,7 +134,7 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
     for unsided_name, (left_nrn, right_nrn) in paired.items():
         left_array = np.asarray(adj.loc[left_nrn.name])
         right_array = np.asarray(adj.loc[right_nrn.name][right_first])
-        sim = navis.connectivity_similarity(np.array([left_array, right_array]), metric="cosine")
+        sim = navis.connectivity_similarity(np.array([left_array, right_array]), metric="cosine", n_cores= 1)
         sim_arr = sim.to_numpy()
         val = float(sim_arr[0, 1])
         if np.isnan(val):
@@ -205,6 +146,95 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
         json.dump(out, f, indent=2, sort_keys=True)
 
     return out
+#%%
+
+def merged_adjacency(pair_list) -> pd.DataFrame:
+    """ 
+    Produce an adjacency matrix where left-right target pairs are each merged into single units.
+
+    The values are input fractions, so merging is done by arithmetic mean (consider harmonic mean?).
+
+    Parameters
+    ----------
+        pair_list : list of 2-tuples of skeleton IDs
+
+    Returns
+    -------
+        pd.DataFrame : adjacency matrix whose row labels are skeleton IDs and column labels are indices into the original pair list
+    """
+    all_skids = []
+    for l_r in pair_list:
+        all_skids.extend(l_r)
+    adj = pymaid.adjacency_matrix(all_skids, fractions=True)
+    rows = []
+    for _, row in adj.iterrows():
+        l, r = row[l_skid], row[r_skid] # are both zero, if so don't add them to row (if sum of both is zero, don't do); if at least one isn't, then add
+        rows.append([
+            (row[l_skid] + row[r_skid]) / 2 # add by summing, don't divide by two; each row now has a different length, pd might not like
+            for l_skid, r_skid in pair_list # rows shouldn't be list, should be dictionary. For every skid (key), value is row constructed from loop (avoiding double zeroes)
+        ])
+
+    return pd.DataFrame(rows, index=adj.index) # return two lists (indices correlated); first is adj.index, corresponding row computed above
+
+# leave with all zeroes, in merged analysis (beforecomputing sim) remove all which are zero in both (shorter vector). do this by pair simultaneously
+# implement some threshold, e.g. 0.7% ()
+# fraction = false, use absolute values for counts ( 2 or less remove)
+
+# prune all double zeroes
+
+def merged_analysis(pair_list):
+    """
+    Constructs adjacency matrix from merged pairs, scores connectivity (cosine, synaptic threshold of 2)
+
+    Parameters
+    ----------
+        pair_list : list of 2-tuples of skeleton IDs
+
+    Returns
+    -------
+        pd.Data Frame: rows = # of pairs (1172), 3 columns (left neuron, right neuron, cosine similarity score)
+    """    
+   
+    adj = merged_adjacency(pair_list)
+    sims = []
+    for l_skid, r_skid in tqdm(pair_list):
+        sim = navis.connectivity_similarity(np.array([adj.loc[l_skid], adj.loc[r_skid]]), "cosine", threshold = 2).to_numpy()[0, 1]
+        sims.append(sim)
+    
+    # for i in range (steps of 2, cos sim for 2 vectors); these 2 may not have same length, 
+
+    df = pd.DataFrame(pair_list, dtype=int, columns=["left_skid", "right_skid"])
+    df["cosine_similarity_merged_targets"] = pd.Series(np.asarray(sims, dtype=float))
+    return df
+
+#%%
+
+class HasNextIterator: 
+    def __init__(self, it): 
+        self._it = iter(it) 
+        self._next = None 
+ 
+    def __iter__(self): 
+        return self 
+ 
+    def has_next(self): 
+        if self._next: 
+            return True 
+        try: 
+            self._next = next(self._it) 
+            return True 
+        except StopIteration: 
+            return False 
+ 
+    def next(self): 
+        if self._next: 
+            ret = self._next 
+            self._next = None 
+            return ret 
+        elif self.has_next(): 
+            return self.next() 
+        else: 
+            raise StopIteration()
 
 
 ## Run analysis and explore data ##
@@ -223,7 +253,7 @@ skid_pairs = bp.to_numpy().astype(int).tolist()
 #%%
 
 merged_results = merged_analysis(skid_pairs)
-merged_results.to_csv(OUT_DIR / "merged_targets_cosine_output.tsv", sep="\t", index=False)
+merged_results.to_csv(OUT_DIR / "merged_threshold_cosine_output.tsv", sep="\t", index=False)
 
 
 sys.exit()
@@ -259,9 +289,6 @@ ax.set_label("Cumulative frequency")
 
 plt.show()
 
-
-## Prior code ##
-
 ''' pair_dict = {}
     for pair in pair_list:
         pair_dict[pair[0]] = pair[1]
@@ -279,7 +306,7 @@ plt.show()
             skid2 = pair_dict.get(skid1)
             if skid2 is None:
                 # Nothing to fuse. But must normalize
-                columns.append(partners[skid1] / float(partners[skid1].sum()))
+                columns.append(partners[skid1] / float(sum(partners["skid1"])))
             else:
                 # Fuse two vectors, normalized
                 n_syn1 = float(sum(partners[skid1]))
@@ -299,3 +326,43 @@ plt.show()
 
         out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
 '''
+
+def fusion(pair_list):
+    # list_pairs: a list of tuples, assumed to be skeleton IDs
+    
+    pair_dict = {}
+    for pair in pair_list:
+        pair_dict[pair[0]] = pair[1]
+        pair_dict[pair[1]] = pair[0]
+    
+    cos_sims = {}
+    for pair in pair_list:
+        partners = pymaid.get_partners(list(pair))    
+        partner_skids = set(partners["skeleton_id"])
+        columns = []
+        itr = iter(partner_skids)
+        while partner_skids:
+            skid1 = partner_skids.pop()
+            skid2 = pair_dict.get(skid1)
+            if skid2 is None:
+                # Nothing to fuse. But must normalize
+                columns.append(partners["skid1"] / float(sum(partners["skid1"])))
+            else:
+                # Fuse two vectors, normalized
+                n_syn1 = float(sum(partners["skid1"]))
+                n_syn2 = float(sum(partners["skid2"]))
+                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
+            # Remove both from set
+            partner_skids.difference_update([skid1, skid2])
+        # Two rows, as many colums as were needed
+        matrix = np.array(columns).transpose() # rows have to be skid1, skid2
+
+        score = navis.connectivity_similarity(matrix, metric="cosine")
+        cos_sims[skid1] = score[0]
+        cos_sims[skid2] = score[1]
+
+    # Save the similarity scores
+    # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
+            
+        out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
+        
