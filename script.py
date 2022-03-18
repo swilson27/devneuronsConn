@@ -40,11 +40,53 @@ rm = pymaid.CatmaidInstance(**creds)
 #loads stored catmaid credentials
 
 
+
 ### LR connectivity analysis ###
 
 
 
 ## Define functions
+
+def merged_analysis(pair_list):
+    # list_pairs: a list of tuples, assumed to be skeleton IDs
+    
+    pair_dict = {}
+    for pair in pair_list:
+        pair_dict[pair[0]] = pair[1]
+        pair_dict[pair[1]] = pair[0]
+    
+    cos_sims = {}
+    for pair in pair_list:
+        partners = pymaid.get_partners(list(pair))    
+        partner_skids = set(partners["skeleton_id"])
+        columns = []
+        itr = iter(partner_skids)
+        while partner_skids:
+            skid1 = partner_skids.pop()
+            skid2 = pair_dict.get(skid1)
+            if skid2 is None:
+                # Nothing to fuse. But must normalize
+                columns.append(partners["skid1"] / float(sum(partners["skid1"])))
+            else:
+                # Fuse two vectors, normalized
+                n_syn1 = float(sum(partners["skid1"]))
+                n_syn2 = float(sum(partners["skid2"]))
+                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
+            # Remove both from set
+            partner_skids.difference_update([skid1, skid2])
+        # Two rows, as many colums as were needed
+        matrix = np.array(columns).transpose() # rows have to be skid1, skid2
+
+        score = navis.connectivity_similarity(matrix, metric="cosine")
+        cos_sims[skid1] = score[0]
+        cos_sims[skid2] = score[1]
+
+    # Save the similarity scores
+    # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
+            
+        out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
+
+## prior (and unused) functions
 
 
 #%%
@@ -94,7 +136,7 @@ def side_merge(left_neurons, right_neurons):
 def generate_adj_matrix(neurons_l, neurons_r):
     
     # generate and load adjacency matrix for each pair
-    # TODO: assumes two lists are same length and rows match (except for L/R difference)
+    # assumes two lists are same length and rows match (except for L/R difference)
 
     #neurons_l, neurons_r = get_neurons()
     paired = dict(side_merge(neurons_l, neurons_r))
@@ -108,8 +150,6 @@ def generate_adj_matrix(neurons_l, neurons_r):
     adj.index = key
     adj.columns = key
     return paired, adj
-
-
 
 def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
     out_file = OUT_DIR / f"sim_{metric}_{'in' if is_input else 'out'}put.json"
@@ -146,7 +186,6 @@ def generate_similarity(paired=None, adj=None, metric="cosine", is_input=False):
         json.dump(out, f, indent=2, sort_keys=True)
 
     return out
-#%%
 
 def merged_adjacency(pair_list) -> pd.DataFrame:
     """ 
@@ -182,7 +221,7 @@ def merged_adjacency(pair_list) -> pd.DataFrame:
 
 # prune all double zeroes
 
-def merged_analysis(pair_list):
+def merged_analysis_old(pair_list):
     """
     Constructs adjacency matrix from merged pairs, scores connectivity (cosine, synaptic threshold of 2)
 
@@ -207,35 +246,6 @@ def merged_analysis(pair_list):
     df["cosine_similarity_merged_targets"] = pd.Series(np.asarray(sims, dtype=float))
     return df
 
-#%%
-
-class HasNextIterator: 
-    def __init__(self, it): 
-        self._it = iter(it) 
-        self._next = None 
- 
-    def __iter__(self): 
-        return self 
- 
-    def has_next(self): 
-        if self._next: 
-            return True 
-        try: 
-            self._next = next(self._it) 
-            return True 
-        except StopIteration: 
-            return False 
- 
-    def next(self): 
-        if self._next: 
-            ret = self._next 
-            self._next = None 
-            return ret 
-        elif self.has_next(): 
-            return self.next() 
-        else: 
-            raise StopIteration()
-
 
 ## Run analysis and explore data ##
 
@@ -249,14 +259,13 @@ bp.drop('Unnamed: 0', axis=1, inplace=True)
 # right_skids = list(bp["right"])
 
 skid_pairs = bp.to_numpy().astype(int).tolist()
-
-#%%
-
 merged_results = merged_analysis(skid_pairs)
-merged_results.to_csv(OUT_DIR / "merged_threshold_cosine_output.tsv", sep="\t", index=False)
+merged_results.to_csv(OUT_DIR / "merged_threshold_cosine_output.csv", index=False)
 
 
 sys.exit()
+
+## old analysis code to revamp
 
 paired, adj = generate_adj_matrix(left_skids, right_skids)
 output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
@@ -288,6 +297,8 @@ ax.set_xlabel(f"{METRIC} similarity value")
 ax.set_label("Cumulative frequency")
 
 plt.show()
+
+## original merged_analysis function (with Albert):
 
 ''' pair_dict = {}
     for pair in pair_list:
@@ -326,43 +337,3 @@ plt.show()
 
         out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
 '''
-
-def fusion(pair_list):
-    # list_pairs: a list of tuples, assumed to be skeleton IDs
-    
-    pair_dict = {}
-    for pair in pair_list:
-        pair_dict[pair[0]] = pair[1]
-        pair_dict[pair[1]] = pair[0]
-    
-    cos_sims = {}
-    for pair in pair_list:
-        partners = pymaid.get_partners(list(pair))    
-        partner_skids = set(partners["skeleton_id"])
-        columns = []
-        itr = iter(partner_skids)
-        while partner_skids:
-            skid1 = partner_skids.pop()
-            skid2 = pair_dict.get(skid1)
-            if skid2 is None:
-                # Nothing to fuse. But must normalize
-                columns.append(partners["skid1"] / float(sum(partners["skid1"])))
-            else:
-                # Fuse two vectors, normalized
-                n_syn1 = float(sum(partners["skid1"]))
-                n_syn2 = float(sum(partners["skid2"]))
-                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
-            # Remove both from set
-            partner_skids.difference_update([skid1, skid2])
-        # Two rows, as many colums as were needed
-        matrix = np.array(columns).transpose() # rows have to be skid1, skid2
-
-        score = navis.connectivity_similarity(matrix, metric="cosine")
-        cos_sims[skid1] = score[0]
-        cos_sims[skid2] = score[1]
-
-    # Save the similarity scores
-    # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
-            
-        out = pd.DataFrame(columns = ["skid_left", "skid_right", "score"])
-        
