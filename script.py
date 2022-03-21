@@ -44,9 +44,11 @@ rm = pymaid.CatmaidInstance(**creds)
 
 ## Define functions
 
+#%%
 def merged_analysis(pair_list):
     """
-    Constructs adjacency matrix from merged pairs (normalized sum), scores connectivity (cosine, synaptic threshold of 2)
+    Constructs adjacency matrix from merged pairs (normalized sum), 
+    scores connectivity similarity (cosine, synaptic threshold of 2) between these pair members
 
     Parameters
     ----------
@@ -62,17 +64,78 @@ def merged_analysis(pair_list):
         pair_dict[pair[0]] = pair[1]
         pair_dict[pair[1]] = pair[0]
     
-    cos_sims = {}
+    sims = []
     for pair in pair_list:
-        partners = pymaid.get_partners(list(pair))    
-        partner_skids = set(partners["skeleton_id"])
+        partners = pymaid.get_partners(list(pair), threshold = 2)
+        vals = partners.iloc[:,[1,4,5,6]]
+
+        partner_skids = set(partners["skeleton_id"].astype(int))
+
         columns = []
-        itr = iter(partner_skids)
         while partner_skids:
-            skid1 = partner_skids.pop()
+            skid1 = int(partner_skids.pop())
             skid2 = pair_dict.get(skid1)
+            """ 
+            I made some modifications to the function overall, with the original one we wrote listed beneath (in block comments as function: 'fusion') 
+            unfortunately however, I have been having issues with construction of the 'merged adjacency matrix' columns,
+            more specifically with the normalization procedure and what was attempted in original function"""
+
+            """ 
+            partners is a DF, with all the pair member's connecting neurons as rows, and attained information as columns.
+            - and so with partners["skid1/2"], we are trying to access the row corresponding to that skid (with all attached info) 
+            This will be output as a pandas Series (the working code for this is partners.loc[partners[skid1]])
+            but I wanted to clarify what we're aiming to get from sum(partners["skid1]); just the connecting synapse quantities?
+
+            If you'd just be able to clarify exactly what we are aiming to normalize across, that would be great as I 
+            am slightly unsure of how to implement this. Just to reiterate, I have made some changes to this merged_analysis function;
+            the one we originally wrote is beneath it (defined as 'fusion').
+            """
             if skid2 is None:
                 # Nothing to fuse, but must normalize
+                columns.append(partners["skid1"] / float(sum(partners["skid1"])))
+                #columns.append(partners.iloc[skid1,5:6] / float(sum(partners.iloc["skid1"])))
+            else:
+                # Fuse two vectors, normalized
+                n_syn1 = float(sum(partners[skid1]))
+                n_syn2 = float(sum(partners[skid2]))
+                columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners.loc[partners[skid1]], partners.loc[partners[skid2]])])
+            # Remove both from set
+            partner_skids.discard(skid1)
+            partner_skids.discard(skid2)          
+        # Two rows, as many columns as were needed
+        matrix = np.array(columns).transpose() # rows have to be pair_L, pair_R
+
+        sims = navis.connectivity_similarity(matrix, metric = "cosine", threshold = 2)
+        sims.append(sims)
+
+    # Output scores as pd.DF, int columns for skids & float for scores 
+    out = pd.DataFrame(pair_list, dtype=int, columns=["left_skid", "right_skid"])
+    out["cosine_similarity"] = pd.Series(np.asarray(sims, dtype=float))
+    return out
+
+
+## original merged_analysis function (with Albert):
+
+
+''' 
+def fusion(pair_list):
+    # list_pairs: a list of tuples, assumed to be skeleton IDs
+    
+    pair_dict = {}
+    for pair in pair_list:
+        pair_dict[pair[0]] = pair[1]
+        pair_dict[pair[1]] = pair[0]
+    
+    cos_sims = {}
+    for pair in pair_list:
+        partners = pymaid.get_partners(pair)    
+        partner_skids = set(partners["skeleton_id"])
+        columns = []
+        while len(partner_skids) > 0:
+            skid1 = iter(partner_skids).next()
+            skid2 = pair_dict.get(skid1, None)
+            if skid2 is None:
+                # Nothing to fuse. But must normalize
                 columns.append(partners["skid1"] / float(sum(partners["skid1"])))
             else:
                 # Fuse two vectors, normalized
@@ -80,19 +143,71 @@ def merged_analysis(pair_list):
                 n_syn2 = float(sum(partners["skid2"]))
                 columns.append([v1/n_syn1 + v2/n_syn2 for v1, v2 in zip(partners["skid1"], partners["skid2"])])
             # Remove both from set
-            partner_skids.difference_update([skid1, skid2])
+            del partner_skids[skid1]
+            del partner_skids[skid2]
         # Two rows, as many colums as were needed
         matrix = np.array(columns).transpose() # rows have to be skid1, skid2
 
-        score = navis.connectivity_similarity(matrix, metric = "cosine", threshold = 2)
+        score = navis.connectivity_similarity(matrix, metric="cosine")
         cos_sims[skid1] = score[0]
         cos_sims[skid2] = score[1]
 
-    # Output scores as pd.DF, int columns for skids & float for scores
+    # Save the similarity scores
+    # TODO create panda DataFrame with int column for skids and float column for scores, and save as CSV
             
-        out = pd.DataFrame(pair_list, dtype=int, columns=["left_skid", "right_skid"])
-        out["cosine_similarity"] = pd.Series(np.asarray(cos_sims, dtype=float))
-        return out
+'''
+
+
+## Run analysis and explore data ##
+
+
+#%%
+METRIC = "cosine"
+
+bp = pd.read_csv(HERE / "brain-pairs.csv")
+bp.drop('Unnamed: 0', axis=1, inplace=True)
+# left_skids = list(bp["left"])
+# right_skids = list(bp["right"])
+
+skid_pairs = bp.to_numpy().astype(int).tolist()
+merged_results = merged_analysis(skid_pairs)
+merged_results.to_csv(OUT_DIR / "merged_threshold_cosine_output.csv", index=False)
+
+
+sys.exit()
+
+## old analysis code to revamp
+
+paired, adj = generate_adj_matrix(left_skids, right_skids)
+output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
+input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
+
+
+def sim_to_xy(sim, normalise=True):
+    x = sorted(v for v in sim.values() if not np.isnan(v))
+    y = np.arange(len(x))
+    if normalise:
+        y /= len(x)
+    return x, y
+
+
+NORMALISE = False
+
+fig = plt.figure()
+ax = fig.add_subplot()
+
+
+out_x, out_y = sim_to_xy(output_sim, NORMALISE)
+ax.plot(out_x, out_y, label="output similarity")
+
+in_x, in_y = sim_to_xy(input_sim, NORMALISE)
+ax.plot(in_x, in_y, label="input similarity")
+
+ax.legend()
+ax.set_xlabel(f"{METRIC} similarity value")
+ax.set_label("Cumulative frequency")
+
+plt.show()
 
 
 ## Prior (and unused) functions
@@ -254,58 +369,6 @@ def merged_analysis_old(pair_list):
     df = pd.DataFrame(pair_list, dtype=int, columns=["left_skid", "right_skid"])
     df["cosine_similarity_merged_targets"] = pd.Series(np.asarray(sims, dtype=float))
     return df
-
-
-## Run analysis and explore data ##
-
-
-#%%
-METRIC = "cosine"
-
-bp = pd.read_csv(HERE / "brain-pairs.csv")
-bp.drop('Unnamed: 0', axis=1, inplace=True)
-# left_skids = list(bp["left"])
-# right_skids = list(bp["right"])
-
-skid_pairs = bp.to_numpy().astype(int).tolist()
-merged_results = merged_analysis(skid_pairs)
-merged_results.to_csv(OUT_DIR / "merged_threshold_cosine_output.csv", index=False)
-
-
-sys.exit()
-
-## old analysis code to revamp
-
-paired, adj = generate_adj_matrix(left_skids, right_skids)
-output_sim = generate_similarity(paired, adj, METRIC, is_input=False)
-input_sim = generate_similarity(paired, adj, METRIC, is_input=True)
-
-
-def sim_to_xy(sim, normalise=True):
-    x = sorted(v for v in sim.values() if not np.isnan(v))
-    y = np.arange(len(x))
-    if normalise:
-        y /= len(x)
-    return x, y
-
-
-NORMALISE = False
-
-fig = plt.figure()
-ax = fig.add_subplot()
-
-
-out_x, out_y = sim_to_xy(output_sim, NORMALISE)
-ax.plot(out_x, out_y, label="output similarity")
-
-in_x, in_y = sim_to_xy(input_sim, NORMALISE)
-ax.plot(in_x, in_y, label="input similarity")
-
-ax.legend()
-ax.set_xlabel(f"{METRIC} similarity value")
-ax.set_label("Cumulative frequency")
-
-plt.show()
 
 ## original merged_analysis function (with Albert):
 
