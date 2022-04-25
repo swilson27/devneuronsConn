@@ -14,8 +14,10 @@ with open(creds_path) as f:
     creds = json.load(f)
 rm = pymaid.CatmaidInstance(**creds)
 
-output = pd.read_csv(HERE / 'merged_targets_cosine_output.tsv', sep='\t')
-output = output.sort_values('cosine_similarity_merged_targets')
+#%%
+
+output = pd.read_csv(HERE / 'merged_threshold_cosine_output.csv')
+output = output.sort_values('cosine_similarity')
 
 # %%
 vals = pymaid.get_names(list(output['left_skid']))
