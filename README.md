@@ -3,7 +3,7 @@
 
 This repository contains scripts and files for a systematic quantification of connectivity similarity across homologous (left:right) pairs of neurons. As a result, any 'deviant' (hence, dev) neurons - which significantly differ from expected alikeness of synaptically connected partners - can be identified from low scores.
 
-Utilises data stored and generated within CATMAID, interfaced with via the Python libraries NAVis and pymaid. Connectivity similarity is algorithmically calculated based on the cosine metric (https://navis.readthedocs.io/en/latest/source/generated/navis.connectivity_similarity.html) ; this is applied separately to generate respective scores for each pairs input (i.e. dendritic) and output (i.e. axonic) partners. Files and scripts all utilise connectomic data from 'Seymour', an L1 D. melangoaster larvae.
+Utilises data stored and generated within CATMAID, interfaced with via the Python libraries NAVis and pymaid. Connectivity similarity is algorithmically calculated based on the cosine similarity metric (https://navis.readthedocs.io/en/latest/source/generated/navis.connectivity_similarity.html) ; this is applied separately to generate respective scores for each pairs input (i.e. dendritic) and output (i.e. axonic) partners. Files and scripts all utilise connectomic data from 'Seymour', an L1 D. melangoaster larvae.
 
 Links: CATMAID (https://catmaid.readthedocs.io/en/stable/) ; NAVis (https://navis.readthedocs.io/en/latest/) ; pymaid (https://pymaid.readthedocs.io/en/latest/)
 
