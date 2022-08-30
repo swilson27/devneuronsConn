@@ -26,15 +26,18 @@ Also see devneuronsMorph repo
 
 CATMAID requires credentials, which must be provided by user from a locally stored directory. These will not be tracked by repository's git.
 
-Live CATMAID instances can require lots of data to be downloaded, which both slows scripts and can lead to different results on subsequent runs (if neurons are modified). Intermediate data downloaded from CATMAID locally will be stored within cache/ directory; git will ignore these files.
+Live CATMAID instances can require lots of data to be downloaded, which both slows scripts and can lead to different results on subsequent runs (if neurons are modified). Intermediate data downloaded from CATMAID locally will be stored within `cache/` directory; git will ignore these files.
 
-Output CSVs and exploratory analyses will be stored in the output/ directory to decrease clutter. This is also currently git ignored, but you can modify any of these if desired.
-
-
-## TO DO: modify below
+Output CSVs and exploratory analyses will be stored in the `output/` directory to decrease clutter. This is also currently git ignored, but you can modify any of these if desired.
 
 
-First use
+# TO DO: modify below
+
+
+## First use
+
+
+```sh
 # Pick a name for your project
 PROJECT_NAME="my_project"
 
@@ -60,32 +63,35 @@ pip install -r requirements.txt
 
 # Make your own credentials file
 cp credentials/example.json credentials/credentials.json
+```
+
 Then edit the credentials file to access your desired CATMAID server, instance, and user.
 
 
 ## General use
 
 
-Whenever you have a new terminal, activate the environment: source venv/bin/activate
-Run the script with python script.py
+- Whenever you have a new terminal, activate the environment: `source venv/bin/activate`
+- Run the script with `python script.py`
 
 
 ## General guidelines
 
 
-Use a modern python. Many actively maintained scientific tools follow numpy's deprecation schedule: https://numpy.org/neps/nep-0029-deprecation_policy.html
-Follow coding standards to make your code as legible and recogniseable as possible. See PEP8: https://www.python.org/dev/peps/pep-0008/
-Coding standards sound like nitpicking but they really, really help. e.g. "I know I wrote a function to get data, but was it called getData, GetData, get_data, GET_DATA, or what?". If code is PEP8-compliant, there is only one answer
-Auto-formatters (e.g. black, isort) are great for legibility and consistency: use make format to format this repository.
-Linters (e.g. flake8) can detect a number of bugs, possible coding issues, and questionable formatting: use make lint to lint this repository (format first).
-Documentation makes your code much easier to understand for the next person to read it: that person will probably be you, so it's worthwhile.
-Type hints, especially on functions, are also great: https://realpython.com/python-type-checking/#hello-types
-Docstrings at the top of modules and functions are better than comments, as they are accessible by the help() function in a python REPL
-Use seeded random number generators where randomness is needed, for replicability.
-Remember to use ISO-8601 dates/times (YYYY-MM-DD) where necessary.
+- Use a modern python. Many actively maintained scientific tools follow numpy's deprecation schedule: https://numpy.org/neps/nep-0029-deprecation_policy.html
+- Follow coding standards to make your code as legible and recogniseable as possible. See PEP8: https://www.python.org/dev/peps/pep-0008/
+  - Coding standards sound like nitpicking but they really, really help. e.g. "I know I wrote a function to get data, but was it called getData, GetData, get_data, GET_DATA, or what?". If code is PEP8-compliant, there is only one answer
+  - Auto-formatters (e.g. `black`, `isort`) are great for legibility and consistency: use `make format` to format this repository.
+  - Linters (e.g. `flake8`) can detect a number of bugs, possible coding issues, and questionable formatting: use `make lint` to lint this repository (format first).
+- Documentation makes your code much easier to understand for the next person to read it: that person will probably be you, so it's worthwhile.
+  - Type hints, especially on functions, are also great: https://realpython.com/python-type-checking/#hello-types
+  - Docstrings at the top of modules and functions are better than comments, as they are accessible by the `help()` function in a python REPL
+- Use seeded random number generators where randomness is needed, for replicability.
+- Remember to use ISO-8601 dates/times (YYYY-MM-DD) where necessary.
 
 
 ## License
 
 
 This repository was based on a template at https://github.com/navis-org/pymaid_template .
+
