@@ -13,13 +13,12 @@ Also see devneuronsMorph repo
 ## Files and scripts
 
 
-cns-pairs.csv - list of 1640 pairs (left and right) of homologous neurons, represented as CATMAID skeleton IDs (skids). Some are annotated with CNS region. 
+- cns-pairs.csv - list of 1640 pairs (left and right) of homologous neurons, represented as CATMAID skeleton IDs (skids). Some are annotated with CNS region. 
 
-script_conn.py - takes each pair and algorithmically generates a cosine similarity score for the input and output fractions of the connectivity matrix
+- script_conn.py - takes each pair and algorithmically generates a cosine similarity score for the input and output fractions of the connectivity matrix
+- explore_conn.py - script to perform exploratory analysis on data; generates various plots and can be modified for bespoke analyses 
 
-explore_conn.py - script to perform exploratory analysis on data; generates various plots and can be modified for bespoke analyses 
-
-cache and output folders to locally store respective components after running script.
+- cache and output folders to locally store respective components after running script.
 
 
 ## General information
@@ -69,7 +68,11 @@ Then edit the credentials file to access your desired CATMAID server, instance, 
 
 Whenever you have a new terminal, activate the environment: source venv/bin/activate
 Run the script with python script.py
-General guidelines
+
+
+## General guidelines
+
+
 Use a modern python. Many actively maintained scientific tools follow numpy's deprecation schedule: https://numpy.org/neps/nep-0029-deprecation_policy.html
 Follow coding standards to make your code as legible and recogniseable as possible. See PEP8: https://www.python.org/dev/peps/pep-0008/
 Coding standards sound like nitpicking but they really, really help. e.g. "I know I wrote a function to get data, but was it called getData, GetData, get_data, GET_DATA, or what?". If code is PEP8-compliant, there is only one answer
